@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+
+import argparse
+from getpass import getpass
+
+from gacoxc import cachingGarminConnect, gpx2igc
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-v', '--verbose',  help="verbose (more -vv)", action="count")
+    parser.add_argument('-u', '--username', help="Garmin Connect username, you will be prompted otherwise")
+    parser.add_argument('-p', '--password', help="Garmin Connect password, you will be prompted otherwise")
+    parser.add_argument('-C', '--config',   help="config file (define any cmdline line argument as k=v per line)")
+
+    parser.add_argument('-d', '--download', help="records to automatically download, supported: "+' '.join(cachingGarminConnect.gc_type_to_download_url.keys()), nargs='*')
+    parser.add_argument('--gpx2igc', help="auto convert gpx to igc, automatically downloads gpx", action="store_true")
+
+    noup_icache = parser.add_mutually_exclusive_group()
+    noup_icache.add_argument('-n', '--no-update', help="do not update latest activities, just download missing records of already cached activities", action="store_true")
+    noup_icache.add_argument('-i', '--no-cache', help="ignore activity cache, re-download all activities", action="store_true")
+    args = parser.parse_args()
+
+    if args.config:
+        with open(args.config) as f:
+            for line in f:
+                if '=' in line:
+                    k,v = line.split('=',1)
+                    ks = k.strip()
+                    #print(ks,  getattr(args, ks))
+                    if ks in args and getattr(args, ks) in [None, False]:
+                        setattr(args, ks, v.strip() if ks!='download' else v.strip().split())
+
+    if not args.username:
+        args.username = input('GC Username: ')
+
+    if not args.password:
+        args.password = getpass('GC Password: ')
+
+    if args.gpx2igc:
+        if 'gpx' not in args.download:
+            args.download += ['gpx']
+
+    if args.verbose is None:
+        args.verbose = 0
+
+    return args
+
+
+def main(args):
+
+    with cachingGarminConnect(args.username, args.password, args.verbose, update=False) as gc: 
+
+        # update this way, we want a bit more control
+        if args.no_cache:
+            gc.clear_cache(True)
+        if not args.no_update:
+            print("Connecting & updating...")
+            gc.update()       
+
+        print("Last 10 out of total %d activities:"%(len(gc)))
+        print(gc.summary(10))
+        
+        print("Downloading missing records...")
+        # we actually check through ALL activities - they will just load from disk or we download new records if requested
+        for act in gc:
+            aid = gc.actid(act)
+            for fmt in args.download:
+                x = gc.download_record(act, fmt)
+                if fmt == 'gpx' and args.gpx2igc and x:
+                    if gc.get_cached_record(aid, 'igc') is None:
+                        if args.verbose: print(" || converting GPX to IGC")
+                        igc = gpx2igc(x, args.username)
+                        gc.cache_record(aid, 'igc', igc)
+
+            # make sure we save all
+            gc.save(aid)
+            # clear the record cache, not needed to keep them in memory
+            gc.clear_cache(records=True)
+        print('Done!')
+
+if __name__ == "__main__":
+    args = parse_args()
+    main(args)
+
