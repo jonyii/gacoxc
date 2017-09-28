@@ -12,6 +12,7 @@ def parse_args():
     parser.add_argument('-u', '--username', help="Garmin Connect username, you will be prompted otherwise")
     parser.add_argument('-p', '--password', help="Garmin Connect password, you will be prompted otherwise")
     parser.add_argument('-C', '--config',   help="config file (define any cmdline line argument as k=v per line)")
+    parser.add_argument('-D', '--cache-dir', help="garmin connect cache dir (default: ~/.garmin_connect_cache)", default='~/.garmin_connect_cache')
 
     parser.add_argument('-d', '--download', help="records to automatically download, supported: "+' '.join(cachingGarminConnect.gc_type_to_download_url.keys()), nargs='*')
     parser.add_argument('--gpx2igc', help="auto convert gpx to igc, automatically downloads gpx", action="store_true")
@@ -49,7 +50,7 @@ def parse_args():
 
 def main(args):
 
-    with cachingGarminConnect(args.username, args.password, args.verbose, update=False) as gc: 
+    with cachingGarminConnect(args.username, args.password, args.verbose, update=False, cache_dir=args.cache_dir) as gc: 
 
         # update this way, we want a bit more control
         if args.no_cache:
